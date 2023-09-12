@@ -1,0 +1,122 @@
+version: "3.7"
+services:
+  nginx-balancer:
+    depends_on:
+      - mattermost
+      - redmine
+      - grafana
+    image: nginx:1.25.2
+    restart: unless-stopped
+    volumes:
+      - ./nginx-balancer/logs/nginx:/var/log/nginx
+      - ./nginx-balancer/conf.d/default.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx-balancer:/etc/nginx
+    networks:
+      - redmine-network
+      - mattermost-network
+      - prometheus-network
+    ports:
+      - "80:80"
+      - "8443:8443"
+
+  postgresql-mattermost:
+    image: postgres:15.4-alpine
+    restart: unless-stopped
+    environment:
+      TX: UTC
+      POSTGRES_USER: mmuser
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mattermost
+    networks:
+      - mattermost-network
+      - prometheus-network
+    volumes:
+      - ./postgresql:/postgresql
+
+  mattermost:
+    depends_on:
+      - postgresql-mattermost
+    image: mattermost/mattermost-enterprise-edition:7.8
+    restart: unless-stopped
+    networks:
+      - mattermost-network
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 200
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./mattermost/config:/mattermost/config:rw
+      - ./mattermost/data:/mattermost/data:rw
+      - ./mattermost/logs:/mattermost/logs:rw
+      - ./mattermost/plugins:/mattermost/plugins:rw
+      - ./mattermost/client/plugins:/mattermost/client/plugins:rw
+      - ./mattermost/bleve-indexes:/mattermost/bleve-indexes:rw
+    environment:
+      TZ: UTC
+      MM_SQLSETTINGS_DRIVERNAME: postgres
+      MM_SQLSETTINGS_DATASOURCE: "postgres://mmuser:password@postgresql-mattermost:5432/mattermost?sslmode=disable&connect_timeout=10"
+
+  postgresql-redmine:
+    image: postgres:15.4-alpine
+    restart: unless-stopped
+    environment:
+      TX: UTC
+      POSTGRES_USER: redmineuser
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: redmine
+    networks:
+      - redmine-network
+      - prometheus-network
+    volumes:
+      - ./postgresql:/postgresql
+
+  redmine:
+    depends_on:
+      - postgresql-redmine
+    image: redmine:5.0.5
+    restart: unless-stopped
+    environment:
+       REDMINE_DB_POSTGRES: postgresql-redmine
+       REDMINE_DB_USERNAME: redmineuser
+       REDMINE_DB_PASSWORD: password
+       REDMINE_DB_DATABASE: redmine
+       REDMINE_SECRET_KEY_BASE: secretkey
+    networks:
+      - redmine-network
+    volumes:
+       - ./redmine/plugins:/usr/src/redmine/plugins
+       - ./redmine/themes:/usr/src/redmine/public/themes
+       - ./redmine/data:/usr/src/redmine/files
+
+  prometheus:
+    depends_on:
+      - nginx-balancer
+      - postgresql-mattermost
+      - postgresql-redmine
+      - mattermost
+      - redmine
+      - grafana
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - prometheus-network
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+      - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+    networks:
+      - prometheus-network
+
+networks:
+  prometheus-network:
+    driver: bridge
+  mattermost-network:
+    driver: bridge
+  redmine-network:
+    driver: bridge
