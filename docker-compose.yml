@@ -5,7 +5,7 @@ services:
       - mattermost
       - redmine
       - grafana
-    image: nginx:1.25.2
+    image: nginx:1.25.2-alpine
     restart: unless-stopped
     volumes:
       - ./nginx-balancer/logs/nginx:/var/log/nginx
@@ -19,43 +19,15 @@ services:
       - "80:80"
       - "8443:8443"
 
-  postgresql-mattermost:
-    image: postgres:15.4-alpine
-    restart: unless-stopped
-    environment:
-      TX: UTC
-      POSTGRES_USER: mmuser
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: mattermost
-    networks:
-      - mattermost-network
-      - prometheus-network
-    volumes:
-      - ./postgresql:/postgresql
+  rocketchat:
+   image
 
-  mattermost:
-    depends_on:
-      - postgresql-mattermost
-    image: mattermost/mattermost-enterprise-edition:7.8
+  mongodb-rocketchat:
+    image: mongo
     restart: unless-stopped
-    networks:
-      - mattermost-network
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 200
-    tmpfs:
-      - /tmp
-    volumes:
-      - ./mattermost/config:/mattermost/config:rw
-      - ./mattermost/data:/mattermost/data:rw
-      - ./mattermost/logs:/mattermost/logs:rw
-      - ./mattermost/plugins:/mattermost/plugins:rw
-      - ./mattermost/client/plugins:/mattermost/client/plugins:rw
-      - ./mattermost/bleve-indexes:/mattermost/bleve-indexes:rw
     environment:
-      TZ: UTC
-      MM_SQLSETTINGS_DRIVERNAME: postgres
-      MM_SQLSETTINGS_DATASOURCE: "postgres://mmuser:password@postgresql-mattermost:5432/mattermost?sslmode=disable&connect_timeout=10"
+      MONGO_INITDB_ROOT_USERNAME: rocketchat
+      MONGO_INITDB_ROOT_PASSWORD: password
 
   postgresql-redmine:
     image: postgres:15.4-alpine
@@ -74,7 +46,7 @@ services:
   redmine:
     depends_on:
       - postgresql-redmine
-    image: redmine:5.0.5
+    image: redmine:5.0.5-alpine
     restart: unless-stopped
     environment:
        REDMINE_DB_POSTGRES: postgresql-redmine
@@ -98,15 +70,43 @@ services:
       - redmine
       - grafana
     image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
     restart: unless-stopped
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     networks:
       - prometheus-network
+    command: --web.enable-lifecycle --config.file=/etc/prometheus/prometheus.yml
+
+  postgresql-grafana:
+    image: postgres:15.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: grafana
+      POSTGRES_USER: grafana
+      POSTGRES_PASSWORD: password
+    volumes:
+      - ./postgresql:/postgresql
+    networks:
+      - prometheus-network
 
   grafana:
+    depends_on:
+      - postgresql-grafana
     image: grafana/grafana:latest
     restart: unless-stopped
+    environment:
+      GF_PATHS_CONFIG: /etc/grafana/grafana.ini
+      GF_SERVER_ROOT_URL: http://91cb5acd148.vps.myjino.ru/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: true
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: password
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: postgresql-grafana:5432
+      GF_DATABASE_NAME: grafana
+      GF_DATABASE_USER: grafana
+      GF_DATABASE_PASSWORD: password
     volumes:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini
       - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml

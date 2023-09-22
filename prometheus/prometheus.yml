@@ -1,0 +1,43 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'nginx'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['nginx-balancer']
+
+  - job_name: 'mattermost'
+    metrics_path: '/metrics'
+    static_configs:
+       - targets: ['mattermost']
+
+  - job_name: 'postgresql-mattermost'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['postgresql-mattermost']
+
+  - job_name: 'redmine'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['redmine']
+
+  - job_name: 'postgresql-redmine'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['postgresql-redmine']
+
+  - job_name: 'prometheus'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['prometheus']
+
+  - job_name: 'postgresql-grafana'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['postgresql-grafana']
+
+  - job_name: 'grafana'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['grafana']
